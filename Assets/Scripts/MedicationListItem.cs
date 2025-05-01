@@ -71,6 +71,18 @@ public class MedicationListItem : MonoBehaviour
         takeDoseButton.onClick.AddListener(OnTakeDoseButtonClicked);
     }
 
+    // بهبود متد نمایش هشدار برای تمام شدن دارو در کلاس MedicationListItem
+    private void ShowMedicationEmptyWarning()
+    {
+        // ابتدا لاگ برای دیباگ
+        Debug.LogWarning($"هشدار: داروی {medication.Name} تمام شده است. لطفاً داروی جدید تهیه کنید.");
+
+        // نمایش هشدار در UI با استفاده از MedicationUIManager
+        if (uiManager != null)
+        {
+            uiManager.ShowMedicationEmptyWarning(medication.Name);
+        }
+    }
     // تبدیل نوع دارو به متن
     private string GetMedicationTypeText(MedicationType type)
     {
@@ -193,9 +205,4 @@ public class MedicationListItem : MonoBehaviour
     }
 
     // نمایش هشدار برای تمام شدن دارو
-    private void ShowMedicationEmptyWarning()
-    {
-        // در پیاده‌سازی واقعی، یک پنجره هشدار نمایش دهید
-        Debug.LogWarning($"هشدار: داروی {medication.Name} تمام شده است. لطفاً داروی جدید تهیه کنید.");
-    }
 }

@@ -8,6 +8,13 @@ using UnityEngine.Networking;
 
 public class MedicationUIManager : MonoBehaviour
 {
+
+    // اضافه کردن به ابتدای کلاس MedicationUIManager
+    [Header("Warning Panel")]
+    [SerializeField] private GameObject medicationEmptyWarningPanel;
+    [SerializeField] private TMP_Text warningMessageText;
+    [SerializeField] private Button warningCloseButton;
+    [SerializeField] private AudioClip warningSound;
     [Header("Add Medication Panel")]
     [SerializeField] private GameObject addMedicationPanel;
     [SerializeField] private TMP_InputField nameInput;
@@ -56,8 +63,49 @@ public class MedicationUIManager : MonoBehaviour
     {
         InitializeUI();
         LoadMedicationsToUI();
-    }
 
+        // تنظیم پنل هشدار
+        if (medicationEmptyWarningPanel != null)
+        {
+            medicationEmptyWarningPanel.SetActive(false);
+
+            if (warningCloseButton != null)
+            {
+                warningCloseButton.onClick.AddListener(() => medicationEmptyWarningPanel.SetActive(false));
+            }
+        }
+    }
+    public void ShowMedicationEmptyWarning(string medicationName)
+    {
+        if (medicationEmptyWarningPanel == null)
+        {
+            Debug.LogError("پنل هشدار تمام شدن دارو تعریف نشده است!");
+            return;
+        }
+
+        // تنظیم متن پیام
+        if (warningMessageText != null)
+        {
+            warningMessageText.text = $"هشدار: داروی {medicationName} تمام شده است. لطفاً داروی جدید تهیه کنید.";
+        }
+
+        // نمایش پنل هشدار
+        medicationEmptyWarningPanel.SetActive(true);
+
+        // پخش صدای هشدار
+        if (warningSound != null)
+        {
+            AudioSource audioSource = GetComponent<AudioSource>();
+            if (audioSource == null)
+            {
+                audioSource = gameObject.AddComponent<AudioSource>();
+            }
+
+            audioSource.clip = warningSound;
+            audioSource.loop = false;
+            audioSource.Play();
+        }
+    }
     // مقدار دهی اولیه رابط کاربری
     private void InitializeUI()
     {
@@ -389,13 +437,15 @@ public class MedicationUIManager : MonoBehaviour
         }
     }
 
-    // دریافت لیست داروها از مدیریت یادآوری
     private List<Medication> GetMedicationList()
     {
-        // این متد باید از ReminderManager لیست داروها را بگیرد
-        // برای رعایت اصول شی‌گرایی، بهتر است ReminderManager یک متد عمومی برای دسترسی به لیست داروها فراهم کند
+        // دریافت لیست داروها از ReminderManager
+        if (ReminderManager.Instance != null)
+        {
+            return ReminderManager.Instance.GetAllMedications();
+        }
 
-        // در اینجا برای نمونه یک لیست موقت برمی‌گردانیم
+        Debug.LogError("ReminderManager یافت نشد!");
         return new List<Medication>();
     }
 

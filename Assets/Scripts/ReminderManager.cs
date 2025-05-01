@@ -2,6 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+
+// استفاده از بسته رسمی Unity Mobile Notifications
 using Unity.Notifications.Android;
 
 public class ReminderManager : MonoBehaviour
@@ -17,13 +19,17 @@ public class ReminderManager : MonoBehaviour
     private string channelName = "یادآور دارو";
     private string channelDescription = "کانال مربوط به یادآوری مصرف داروها";
 
+    [SerializeField] private string smallIconName = "icon_small";
+    [SerializeField] private string largeIconName = "icon_large";
+    [SerializeField] private Color notificationColor = Color.red;
+
     private void Awake()
     {
         // پیاده‌سازی الگوی سینگلتون
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // حفظ این آبجکت بین صحنه‌ها
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
@@ -44,15 +50,21 @@ public class ReminderManager : MonoBehaviour
     // راه‌اندازی کانال نوتیفیکیشن برای اندروید
     private void InitializeNotificationChannel()
     {
+        // لغو همه نوتیفیکیشن‌های قبلی
+        AndroidNotificationCenter.CancelAllNotifications();
+
+        // ایجاد کانال نوتیفیکیشن (برای اندروید 8.0 و بالاتر)
         var channel = new AndroidNotificationChannel()
         {
             Id = channelId,
             Name = channelName,
             Description = channelDescription,
             Importance = Importance.High,
+            CanBypassDnd = true,
             CanShowBadge = true,
             EnableLights = true,
             EnableVibration = true,
+            LockScreenVisibility = LockScreenVisibility.Public
         };
 
         AndroidNotificationCenter.RegisterNotificationChannel(channel);
@@ -113,10 +125,7 @@ public class ReminderManager : MonoBehaviour
     // لغو یادآورهای یک دارو
     private void CancelRemindersForMedication(Medication medication)
     {
-        // باید از الگوی مشخصی برای شناسه نوتیفیکیشن‌ها استفاده کنیم
-        // و بر اساس آن نوتیفیکیشن‌های مربوط به این دارو را لغو کنیم
-
-        // پیاده‌سازی ساده: استفاده از هش کد Id دارو
+        // استفاده از هش کد ID دارو
         int notificationId = medication.Id.GetHashCode();
         AndroidNotificationCenter.CancelNotification(notificationId);
     }
@@ -129,9 +138,21 @@ public class ReminderManager : MonoBehaviour
         {
             Title = $"یادآور مصرف {medication.Name}",
             Text = $"زمان مصرف {medication.Name} رسیده است. {medication.Description}",
-            SmallIcon = "icon_small",
-            LargeIcon = "icon_large",
+            SmallIcon = smallIconName,
+            LargeIcon = largeIconName,
             FireTime = reminderTime,
+            Color = notificationColor,
+
+            // تنظیمات اضافی برای نمایش به صورت آلارم
+            Group = "medication_alarms",
+            GroupSummary = true,
+            GroupAlertBehaviour = GroupAlertBehaviours.GroupAlertAll,
+
+            // داده های اضافی برای شناسایی دارو
+            // ذخیره شناسه دارو در IntentData
+            IntentData = $"medication_{medication.Id}",
+
+            // تنظیمات بستن خودکار
             ShouldAutoCancel = false
         };
 
@@ -150,68 +171,75 @@ public class ReminderManager : MonoBehaviour
         Debug.Log($"یادآور برای {medication.Name} در {reminderTime} تنظیم شد.");
     }
 
-    // چک کردن و پردازش یادآورها در صورت عدم پاسخ کاربر
-    private IEnumerator CheckMissedReminders()
+    // دریافت دارو با شناسه
+    public Medication GetMedicationById(string medicationId)
     {
-        while (true)
-        {
-            // بررسی همه داروها
-            foreach (Medication medication in medications)
-            {
-                foreach (DateTime reminderTime in medication.ReminderTimes)
-                {
-                    // اگر 15 دقیقه از زمان یادآوری گذشته باشد و هنوز پاسخی داده نشده
-                    if (DateTime.Now > reminderTime.AddMinutes(15) &&
-                        !PlayerPrefs.HasKey($"Reminder_Acknowledged_{medication.Id}_{reminderTime.ToShortTimeString()}"))
-                    {
-                        // ارسال پیام به مخاطب اضطراری
-                        if (medication.EmergencyContact != null)
-                        {
-                            SendEmergencyMessage(medication);
-                        }
-                    }
-                }
-            }
-
-            // بررسی مجدد بعد از 5 دقیقه
-            yield return new WaitForSeconds(300);
-        }
+        return medications.Find(m => m.Id == medicationId);
     }
 
-    // ارسال پیام به مخاطب اضطراری
-    private void SendEmergencyMessage(Medication medication)
+    // دریافت همه داروها
+    public List<Medication> GetAllMedications()
     {
-        string message = $"هشدار: {PlayerPrefs.GetString("UserName", "کاربر")} داروی {medication.Name} را در زمان مقرر مصرف نکرده است.";
-
-        // تلاش برای ارسال ایمیل
-        if (!string.IsNullOrEmpty(medication.EmergencyContact.Email))
-        {
-            SendEmail(medication.EmergencyContact.Email, "هشدار یادآور دارو", message);
-        }
-
-        // اینجا می‌توانید کدهای ارسال پیام به تلگرام یا واتس‌اپ را اضافه کنید
-        // به SDK یا API های مربوطه نیاز خواهید داشت
-
-        Debug.Log($"پیام اضطراری برای {medication.Name} به {medication.EmergencyContact.Name} ارسال شد.");
-    }
-
-    // ارسال ایمیل (نیاز به پیاده‌سازی با پلاگین یا سرویس وب)
-    private void SendEmail(string email, string subject, string message)
-    {
-        // این متد نیاز به پیاده‌سازی با استفاده از پلاگین یا سرویس وب دارد
-        // به عنوان مثال می‌توانید از Simple Mail یا Email Composer استفاده کنید
-        Debug.Log($"ارسال ایمیل به {email}: {subject}");
+        return new List<Medication>(medications);
     }
 
     // ذخیره‌سازی داده‌های داروها
     public void SaveMedications()
     {
-        // تبدیل لیست داروها به فرمت JSON و ذخیره در PlayerPrefs
-        // برای پیاده‌سازی واقعی، باید از JSONUtility یا Newtonsoft.Json استفاده کرد
-        // و داده‌ها را به صورت JSON ذخیره کرد
+        // ایجاد کلاس موقت برای ذخیره لیست داروها
+        MedicationDataList dataList = new MedicationDataList();
+        dataList.medicationsData = new List<MedicationData>();
 
-        // اینجا فقط تعداد داروها را ذخیره می‌کنیم (نمونه اولیه)
-        PlayerPrefs.SetInt("MedicationCount", medications.Count);
+        // تبدیل هر دارو به داده قابل ذخیره‌سازی
+        foreach (Medication med in medications)
+        {
+            MedicationData data = new MedicationData();
+            data.id = med.Id;
+            data.name = med.Name;
+            data.description = med.Description;
+            data.type = (int)med.Type;
+            data.quantity = med.Quantity;
+            data.initialQuantity = med.InitialQuantity;
+            data.dosagePerTime = med.DosagePerTime;
+            data.isDaily = med.IsDaily;
+
+            // ذخیره زمان‌های یادآوری
+            data.reminderHours = new List<int>();
+            data.reminderMinutes = new List<int>();
+            foreach (DateTime time in med.ReminderTimes)
+            {
+                data.reminderHours.Add(time.Hour);
+                data.reminderMinutes.Add(time.Minute);
+            }
+
+            // ذخیره روزهای هفته
+            data.daysOfWeek = new List<int>();
+            if (med.DaysOfWeek != null)
+            {
+                foreach (DayOfWeek day in med.DaysOfWeek)
+                {
+                    data.daysOfWeek.Add((int)day);
+                }
+            }
+
+            // ذخیره اطلاعات مخاطب اضطراری
+            if (med.EmergencyContact != null)
+            {
+                data.emergencyContactName = med.EmergencyContact.Name;
+                data.emergencyContactPhone = med.EmergencyContact.PhoneNumber;
+                data.emergencyContactEmail = med.EmergencyContact.Email;
+                data.emergencyContactTelegram = med.EmergencyContact.TelegramId;
+                data.emergencyContactWhatsApp = med.EmergencyContact.WhatsAppNumber;
+            }
+
+            dataList.medicationsData.Add(data);
+        }
+
+        // تبدیل به JSON
+        string jsonData = JsonUtility.ToJson(dataList, true);
+
+        // ذخیره در PlayerPrefs
+        PlayerPrefs.SetString("MedicationsJson", jsonData);
         PlayerPrefs.Save();
 
         Debug.Log($"{medications.Count} دارو ذخیره شد.");
@@ -220,11 +248,74 @@ public class ReminderManager : MonoBehaviour
     // بارگذاری داده‌های داروها
     private void LoadMedications()
     {
-        // در یک پیاده‌سازی واقعی، باید داده‌های داروها را از فایل JSON بخوانید
-        // و آنها را به لیست داروها اضافه کنید
+        // پاک کردن لیست فعلی
+        medications.Clear();
 
-        int count = PlayerPrefs.GetInt("MedicationCount", 0);
-        Debug.Log($"{count} دارو بارگذاری شد.");
+        // خواندن JSON از PlayerPrefs
+        string jsonData = PlayerPrefs.GetString("MedicationsJson", "");
+
+        if (string.IsNullOrEmpty(jsonData))
+        {
+            Debug.Log("داده ذخیره‌شده‌ای یافت نشد.");
+            return;
+        }
+
+        // تبدیل JSON به داده
+        MedicationDataList dataList = JsonUtility.FromJson<MedicationDataList>(jsonData);
+
+        if (dataList == null || dataList.medicationsData == null)
+        {
+            Debug.LogError("خطا در خواندن داده‌های دارو!");
+            return;
+        }
+
+        // بازسازی داروها از داده
+        foreach (MedicationData data in dataList.medicationsData)
+        {
+            // ساخت شی دارو
+            Medication med = new Medication(data.name, data.description, (MedicationType)data.type, data.quantity);
+            med.Quantity = data.quantity;
+            med.InitialQuantity = data.initialQuantity;
+            med.DosagePerTime = data.dosagePerTime;
+            med.IsDaily = data.isDaily;
+
+            // بازسازی زمان‌های یادآوری
+            med.ReminderTimes = new List<DateTime>();
+            for (int i = 0; i < data.reminderHours.Count && i < data.reminderMinutes.Count; i++)
+            {
+                DateTime now = DateTime.Now;
+                DateTime reminderTime = new DateTime(
+                    now.Year, now.Month, now.Day,
+                    data.reminderHours[i], data.reminderMinutes[i], 0
+                );
+                med.ReminderTimes.Add(reminderTime);
+            }
+
+            // بازسازی روزهای هفته
+            med.DaysOfWeek = new List<DayOfWeek>();
+            if (data.daysOfWeek != null)
+            {
+                foreach (int day in data.daysOfWeek)
+                {
+                    med.DaysOfWeek.Add((DayOfWeek)day);
+                }
+            }
+
+            // بازسازی مخاطب اضطراری
+            if (!string.IsNullOrEmpty(data.emergencyContactName))
+            {
+                ContactInfo contact = new ContactInfo(data.emergencyContactName);
+                contact.PhoneNumber = data.emergencyContactPhone;
+                contact.Email = data.emergencyContactEmail;
+                contact.TelegramId = data.emergencyContactTelegram;
+                contact.WhatsAppNumber = data.emergencyContactWhatsApp;
+                med.EmergencyContact = contact;
+            }
+
+            medications.Add(med);
+        }
+
+        Debug.Log($"{medications.Count} دارو بارگذاری شد.");
     }
 
     // اعلام مصرف دارو توسط کاربر
@@ -242,6 +333,45 @@ public class ReminderManager : MonoBehaviour
 
             // ذخیره تغییرات مقدار دارو
             SaveMedications();
+
+            // بررسی اتمام دارو
+            if (med.Quantity <= 0 && (med.Type == MedicationType.Pill || med.Type == MedicationType.Capsule))
+            {
+                // اعلام اتمام دارو
+                MedicationUIManager uiManager = FindObjectOfType<MedicationUIManager>();
+                if (uiManager != null)
+                {
+                    uiManager.ShowMedicationEmptyWarning(med.Name);
+                }
+            }
         }
     }
+}
+
+// کلاس‌های کمکی برای ذخیره‌سازی داده‌ها
+[System.Serializable]
+public class MedicationDataList
+{
+    public List<MedicationData> medicationsData;
+}
+
+[System.Serializable]
+public class MedicationData
+{
+    public string id;
+    public string name;
+    public string description;
+    public int type;
+    public int quantity;
+    public int initialQuantity;
+    public int dosagePerTime;
+    public bool isDaily;
+    public List<int> reminderHours;
+    public List<int> reminderMinutes;
+    public List<int> daysOfWeek;
+    public string emergencyContactName;
+    public string emergencyContactPhone;
+    public string emergencyContactEmail;
+    public string emergencyContactTelegram;
+    public string emergencyContactWhatsApp;
 }
